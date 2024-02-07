@@ -1,23 +1,84 @@
 /vendor/
-node_modules/
+/node_modules/
+
+# Laravel specific
+/bootstrap/cache/*.php
+/storage/*.key
+/storage/framework/
+/storage/logs/
+/public/storage
+.env
+.env.backup
+.phpunit.result.cache
+
+# IDEs and editors
+/.idea/
+/.vscode/
+*.sublime-workspace
+*.sublime-project
+*.phpstorm.meta.php
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Node.js
 npm-debug.log
 yarn-error.log
 
-# Laravel 4 specific
-bootstrap/compiled.php
-app/storage/
+# Logs
+*.log
+*.sql
+*.sqlite
 
-# Laravel 5 & Lumen specific
-public/storage
-public/hot
+# OS generated files #
+######################
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Laravel 5 & Lumen specific with changed public path
-public_html/storage
-public_html/hot
+# Compiled source #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
 
-storage/*.key
-.env
-Homestead.yaml
+# Packages #
+############
+# it's better to unpack these files and commit the raw source
+# git has its own built in compression methods
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Testing #
+###########
+/.phpunit.result.cache
+
+# Laravel Mix
+/public/mix-manifest.json
+/public/css
+/public/js
+
+# Others
 Homestead.json
-/.vagrant
-.phpunit.result.cache
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+.env.local
+.env.testing
+*.vsidx
+# User-specific
+/.bash_history
+
