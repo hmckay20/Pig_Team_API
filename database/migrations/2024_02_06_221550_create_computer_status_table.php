@@ -16,7 +16,6 @@ return new class extends Migration
             $table->dateTime('CheckTime');
             $table->decimal('RAMUsage', 5, 2);
             $table->decimal('StorageUsage', 5, 2);
-            $table->timestamps(); // This will add both created_at and updated_at columns
         });
 
     }

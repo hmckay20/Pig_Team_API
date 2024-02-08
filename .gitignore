@@ -79,6 +79,8 @@ yarn-error.log
 .env.local
 .env.testing
 *.vsidx
+*wsuo
+applicationhost.config
 # User-specific
 /.bash_history
 
