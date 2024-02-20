@@ -53,7 +53,7 @@ class FileUploadController extends Controller
         } else {
             // This is NOT
             // Send yesterday’s incremental table first. 
-
+        }
 
         // Add data to respective tables
         
