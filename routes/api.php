@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ComputerStatusController;
 use App\Http\Controllers\ImageCaptureStatusController;
+use App\Http\Controllers\FeederIncrementalDataController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -17,7 +18,7 @@ use App\Http\Controllers\ImageCaptureStatusController;
 */
 Route::post('/computer-status', [ComputerStatusController::class, 'store']);
 Route::post('/image-capture-status', [ImageCaptureStatusController::class, 'store']);
-
+Route::post('/upload-file', [FeederIncrementalDataController::class, 'upload']);
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });

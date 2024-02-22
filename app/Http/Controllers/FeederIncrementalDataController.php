@@ -1,51 +1,41 @@
 <?php
-
 namespace App\Http\Controllers;
 
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\Request;
-// use Illuminate\Routing\Controller as BaseController;
+use Illuminate\Support\Facades\Log; // Correctly imported Log facade
 
-class FileUploadController extends Controller
+class FeederIncrementalDataController extends Controller
 {
-    public function incremental_upload(Request $request)
+    public function upload(Request $request)
     {
-        $message = 'File uploaded successfully';
-        $sqlFileName = NULL;
+       \Log::info('File upload request received.');
+        \Log::info('Files in request:', $request->allFiles());
 
-        $request->validate([ // Quick validate
-            'file' => 'required|mimes:zip',
-        ]);
-        
-        // Validate the uploaded file
-        $uploadedZipFile = $_FILES['zip_file']; // TODO: Change 'zip_file' to the real name of the file.
-        $zip = new ZipArchive();
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $destinationPath = 'C:/Users/hmmmc/OneDrive/Desktop/uploads';
+            $filename = $file->getClientOriginalName();
 
-        if ($zip->open($uploadedZipFile['tmp_name']) === TRUE) {
-            if ($zip->numFiles === 1) {
-                $sqlFileName = $zip->getNameIndex(0);
-            } else {
-                $message = "Expected one file in the zip archive, found {$zip->numFiles} files.";
+            \Log::info("File found in request: $filename");
+
+            try {
+                \Log::info("Attempting to move file to $destinationPath");
+                $file->move($destinationPath, $filename);
+                \Log::info("File moved successfully.");
+
+                return response()->json([
+                    'message' => 'File uploaded successfully',
+                    'path' => $destinationPath . '\\' . $filename,
+                ]);
+            } catch (\Exception $e) {
+                \Log::error("Error moving file: " . $e->getMessage());
+                return response()->json(['message' => 'File upload failed'], 500);
             }
-            $zip->close();
         } else {
-            $message = "Failed to open the zip file.";
+            \Log::warning('No file found in the request.');
+            return response()->json(['message' => 'No file uploaded'], 400);
         }
 
-        // Is this today's data?
-        $currentDate = date("Y-m-d");
-        if (strstr($sqlFileName, $currentDate) !== false) {
-            // This is today's data
-        } else {
-            // This is NOT today's data.
-        }
-
-
-        // Add data to respective tables
-        
-
-        // Return a response based on validation and storing result
-        return response()->json(['message' => $message, 'path' => $zipPath]); //TODO: Add a $zipPath if necessary
     }
+
 }

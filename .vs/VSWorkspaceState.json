@@ -4,10 +4,12 @@
     "\\app",
     "\\app\\Http",
     "\\app\\Http\\Controllers",
-    "\\app\\Models",
     "\\database",
-    "\\database\\migrations",
-    "\\routes"
+    "\\routes",
+    "\\storage",
+    "\\storage\\app",
+    "\\storage\\app\\public"
   ],
+  "SelectedNode": "\\app\\Http\\Controllers\\FeederIncrementalDataController.php",
   "PreviewInSolutionExplorer": false
 }
