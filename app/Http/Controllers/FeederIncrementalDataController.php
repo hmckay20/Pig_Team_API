@@ -12,24 +12,31 @@ class FeederIncrementalDataController extends Controller
         \Log::info('Files in request:', $request->allFiles());
 
         if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $destinationPath = 'C:/Users/hmmmc/OneDrive/Desktop/uploads';
-            $filename = $file->getClientOriginalName();
+            if (
+                $request->validate([ // Quick validate
+                    'file' => 'required|mimes:zip',
+                ])
+            ) {
 
-            \Log::info("File found in request: $filename");
+                $file = $request->file('file');
+                $destinationPath = 'C:/Users/hmmmc/OneDrive/Desktop/uploads';
+                $filename = $file->getClientOriginalName();
 
-            try {
-                \Log::info("Attempting to move file to $destinationPath");
-                $file->move($destinationPath, $filename);
-                \Log::info("File moved successfully.");
+                \Log::info("File found in request: $filename");
 
-                return response()->json([
-                    'message' => 'File uploaded successfully',
-                    'path' => $destinationPath . '\\' . $filename,
-                ]);
-            } catch (\Exception $e) {
-                \Log::error("Error moving file: " . $e->getMessage());
-                return response()->json(['message' => 'File upload failed'], 500);
+                try {
+                    \Log::info("Attempting to move file to $destinationPath");
+                    $file->move($destinationPath, $filename);
+                    \Log::info("File moved successfully.");
+
+                    return response()->json([
+                        'message' => 'File uploaded successfully',
+                        'path' => $destinationPath . '\\' . $filename,
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error("Error moving file: " . $e->getMessage());
+                    return response()->json(['message' => 'File upload failed'], 500);
+                }
             }
         } else {
             \Log::warning('No file found in the request.');
