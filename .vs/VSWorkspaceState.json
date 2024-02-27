@@ -5,11 +5,12 @@
     "\\app\\Http",
     "\\app\\Http\\Controllers",
     "\\database",
+    "\\database\\migrations",
     "\\routes",
     "\\storage",
     "\\storage\\app",
     "\\storage\\app\\public"
   ],
-  "SelectedNode": "\\app\\Http\\Controllers\\FeederIncrementalDataController.php",
+  "SelectedNode": "\\app\\Http\\Controllers\\HourlyStatusController.php",
   "PreviewInSolutionExplorer": false
 }
