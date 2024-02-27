@@ -3,8 +3,9 @@
 use App\Models\ImageCaptureStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ComputerStatusController;
+use App\Http\Controllers\HourlyStatusController;
 use App\Http\Controllers\ImageCaptureStatusController;
+use App\Http\Controllers\FeederIncrementalDataController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -15,9 +16,9 @@ use App\Http\Controllers\ImageCaptureStatusController;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
-Route::post('/computer-status', [ComputerStatusController::class, 'store']);
+Route::post('/hourly-status', [HourlyStatusController::class, 'store']);
 Route::post('/image-capture-status', [ImageCaptureStatusController::class, 'store']);
-
+Route::post('/upload-file', [FeederIncrementalDataController::class, 'upload']);
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
