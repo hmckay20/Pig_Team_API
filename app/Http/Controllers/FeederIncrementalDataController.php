@@ -38,9 +38,10 @@ class FileUploadController extends Controller
 
         // Is this the table from yesterday?
         $yesterdayDate = date("Y-m-d", strtotime("-1 day"));
-        if (strstr($sqlFileName, $yesterdayDate) == false) { // This is NOT the table from yesterday.
+        // This is NOT the table from yesterday.
+        if (strstr($sqlFileName, $yesterdayDate) == false) { 
             // DO NOT SEND DATA IF NOT FROM YESTERDAY
-            // sendPreviousIncremental($yesterdayDate);    
+            // Do action  
         } else {
             $correctDate = TRUE;
         }
@@ -68,7 +69,7 @@ class FileUploadController extends Controller
         }
 
         // Now check how many records feeder_data_new_incremental contains
-        $sqlDump = file_get_contents('sql_dump_file.sql'); // TODO: Change 'sql_dump_file.sql' to the path for the file
+        $sqlDump = file_get_contents('sql_dump_file.sql'); // TODO: Change 'sql_dump_file.sql' to the path for the file?
 
         preg_match_all("/INSERT INTO `feeder_data_new_incremental` VALUES \((.*?)\);/", $sqlDump, $matches);
         
@@ -113,49 +114,102 @@ class FileUploadController extends Controller
             }
         }
 
-        // Compare the counts
-        if ($recordCount == $data_newCount) {
+        if ($recordCount == $data_newCount) { // Compare the counts
             $correctCount = TRUE;
         }
 
         if ($correctDate && $correctCount) { // SEND AWAY - Add data to respective tables
-                   
-
+            sendIncrementalToMaster($sqlDump);
+            populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount);
+            clearIncremental();
         }
 
         // Return a response based on validation and storing result
         return response()->json(['message' => $message, 'records' => $recordCount, 'path' => $zipPath]); //TODO: Add a $zipPath if necessary
     }
 
-    private function checkYesterdayData($yesterdayDate) 
+
+    private function checkPreviousData($previousDate) // FIX
     {
-        // Check if yesterday’s incremental table is there. 
+        // Check if the previous day's incremental table is there. 
         
-        $idsServername = "servername"; // feeder_data_ids credentials
-        $idsUsername = "username";
-        $idsPassword = "password";
-        $idsDatabase = "feeder_data_ids";
+        $masterServername = "servername"; // master credentials
+        $masterUsername = "username";
+        $masterPassword = "password";
+        $masterDatabase = "feeder_data_new";
 
-        $idsConn = new mysqli($idsServername, $idsUsername, $idsPassword, $idsDatabase);
-        if ($idsConn->connect_error) { // Verify connection
-            die("Connection to feeder_data_ids failed: " . $idsConn->connect_error);
+        $masterConn = new mysqli($masterServername, $masterUsername, $masterPassword, $masterDatabase);
+        if ($masterConn->connect_error) {
+            die("Connection to master failed: " . $masterConn->connect_error);
         }
-        $sql = "SELECT * FROM feeder_data_ids WHERE date = '$yesterdayDate'";
-        $result = $idsConn->query($sql);
 
-        $idsConn->close();
+        $sql = "SELECT * FROM feeder_data_new WHERE date = '$previousDate'";
+        $result = $masterConn->query($sql);
+
+        $masterConn->close();
 
         if ($result->num_rows == 0) { // Yesterday's data was not sent and received
-            // sendIncrementalToMaster($yesterdayDate); Do we need to do that first?
+            // ACTION
         }
     }
 
-    private function sendIncrementalToMaster($date) {
-        
 
+    private function sendIncrementalToMaster($sqlDump, $message) {
+
+        $masterServername = "servername"; // master credentials
+        $masterUsername = "username";
+        $masterPassword = "password";
+        $masterDatabase = "feeder_data_new";
+
+        $masterConn = new mysqli($masterServername, $masterUsername, $masterPassword, $masterDatabase);
+        if ($masterConn->connect_error) {
+            die("Connection to master failed: " . $masterConn->connect_error);
+        }
+
+        $sql_queries = explode(';', $sqlDump);
+        foreach ($sql_queries as $sql) {
+            if (trim($sql) != '') { // If there is nothing to add, do not.
+
+                if ($masterConn->query($sql) != TRUE) {
+                    die("Error executing query while adding incremental data to master: " . $masterConn->error);
+                }
+
+            }
+        }
+        $masterConn->close();
+        $message = "Successfully sent incremental data to master. ";
     }
 
-    private function populateFeederDataIds() {
+
+    private function populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount) {
+
+        $sqlStatements = explode(';', $sqlDump); // Find id_first and id_last
+        $ids = array();
+
+        foreach ($sqlStatements as $sql) {
+            if (trim($sql) != '') {
+                $parts = explode(',', $sql);
+                $id = trim($parts[0]);
+                $ids[] = $id;
+            }
+        }
+
+        $id_first = reset($ids);
+        $id_last = end($ids);
+
+        $updated = date('Y-m-d H:i:s');
+
+        $unique_rfid_values = []; // Find unique rfid values
+
+        foreach ($matches[1] as $insert_values) {
+            preg_match_all('/"([^"]+)"/', $insert_values, $values);
+            $rfid = $values[1][4];
+            if (!in_array($rfid, $unique_rfid_values)) {
+                $unique_rfid_values[] = $rfid;
+            }
+        }
+
+        $cnt_rfids = count($unique_rfid_values);
 
         $idsServername = "servername"; // feeder_data_ids credentials
         $idsUsername = "username";
@@ -169,9 +223,36 @@ class FileUploadController extends Controller
         $sql = "SELECT * FROM feeder_data_ids WHERE date = '$yesterdayDate'";
         $result = $idsConn->query($sql);
 
+        $sql = "INSERT INTO feeder_data_ids (`date`, `id_first`, `id_last`, `totalreads`, `cnt_rfids`, `updated`) VALUES ('$yesterdayDate', '$id_first', '$id_last', '$recordCount', '$cnt_rfids', '$updated')";
+    
+        if ($idsConn->query($sql) === TRUE) {
+            $message .= "Successfully updated feeder_data_ids. ";
+        } else {
+            die("Update to feeder_data_ids failed: " . $idsConn->connect_error);
+        }
+        
         $idsConn->close();
+    }
 
-        // Implementation to populate feeder_data_ids table with the given date
+
+    private function clearIncremental() {
+        $incrementalServername = "servername"; // feeder_data_new_incremental credentials
+        $incrementalUsername = "username";
+        $incrementalPassword = "password";
+        $incrementalDatabase = "feeder_data_new_incremental";
+
+        $incrementalConn = new mysqli($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
+        if ($incrementalConn->connect_error) { // Verify connection
+            die("Connection to feeder_data_new_incremental failed: " . $incrementalConn->connect_error);
+        }
+
+        $sql = "DELETE FROM feeder_data_new_incremental";
+        
+        if ($incrementalConn->query($sql) != TRUE) {
+            die("Error clearing incremental table: " . $incrementalConn->error);
+        }
+        
+        $incrementalConn->close();
     }
 
 }
