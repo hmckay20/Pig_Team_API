@@ -320,6 +320,8 @@ class FileUploadController extends Controller
             die("Error clearing incremental table: " . $incrementalConn->error);
         }
         
+        echo "Incremental table cleared. ";
+
         $incrementalConn->close();
     }
 
