@@ -1,14 +1,15 @@
 <?php
+
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log; // Correctly imported Log facade
 
-class FeederIncrementalDataController extends Controller
+use Illuminate\Http\Request;
+
+class LogFilesController extends Controller
 {
-    public function upload(Request $request)
+    public function SendLogFiles(Request $request)
     {
-       \Log::info('File upload request received.');
+        \Log::info('File upload request received.');
         \Log::info('Files in request:', $request->allFiles());
 
         if ($request->hasFile('file')) {
