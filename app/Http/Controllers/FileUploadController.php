@@ -176,6 +176,7 @@ class FileUploadController extends Controller
         if ($result->num_rows == 0) { // Yesterday's data was not sent and received
             // ACTION
         }
+        return response()->json(['Check previous data done']);
     }
 
 
@@ -204,6 +205,8 @@ class FileUploadController extends Controller
         }
         $masterConn->close();
         $message .= "Successfully sent incremental data to master. ";
+
+        return response()->json(['sent incremental to master']);
     }
 
 
@@ -266,6 +269,8 @@ class FileUploadController extends Controller
         }
 
         $idsConn->close();
+
+        return response()->json(['populated ids']);
     }
 
 
@@ -288,6 +293,8 @@ class FileUploadController extends Controller
         }
 
         $incrementalConn->close();
+
+        return response()->json(['cleared incremental']);
     }
 
 }
