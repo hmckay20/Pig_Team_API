@@ -11,6 +11,6 @@
     "\\storage\\app",
     "\\storage\\app\\public"
   ],
-  "SelectedNode": "\\app\\Http\\Controllers\\HourlyStatusController.php",
+  "SelectedNode": "\\routes\\api.php",
   "PreviewInSolutionExplorer": false
 }
