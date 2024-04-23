@@ -57,8 +57,7 @@ class FileUploadController extends Controller
         $yesterdayDate = date("Y-m-d", strtotime("-1 day"));
 
         if (checkPreviousData($yesterdayDate) == false) {
-            echo "This is not yesterday's table.";
-            die("This is not yesterday's table.");
+            Log::info('Information from a previous day(s) should now be updated.');
         } else {
             $correctDate = TRUE;
         }
@@ -150,6 +149,7 @@ class FileUploadController extends Controller
         return response()->json(['message' => $message, 'records' => $recordCount]);
     }
 
+
     private function updateDataSentLog($yesterdayDate)
     {
         $today = date("Y-m-d");
@@ -169,10 +169,12 @@ class FileUploadController extends Controller
 
         $truthConn->close();
 
-        die("Update to data_sent_log failed.");
+        echo "FAULT 2: Update to data_sent_log failed.";
+        die("FAULT 2: Update to data_sent_log failed.");
     }
 
-    private function checkPreviousData($previousDate)
+
+    private function checkPreviousData($message, $date)
     {
         // Check if the previous day's incremental table has been updated. 
         $truthServername = "127.0.0.1"; // data_sent_log credentials
@@ -182,20 +184,32 @@ class FileUploadController extends Controller
 
         $truthConn = new \MySQLi($truthServername, $truthUsername, $truthPassword, $truthDatabase);
         if ($truthConn->connect_error) {
-            die("Connection to table data_sent_log failed: " . $truthConn->connect_error);
+            die("Connection to data_sent_log failed: " . $truthConn->connect_error);
         }
 
-        $sql = "SELECT * FROM data_sent_log WHERE data_date = $previousDate AND data_sent = 1";
+        $sql = "SELECT * FROM data_sent_log WHERE data_date = $date AND data_sent = 1";
         $result = $truthConn->query($sql);
 
         $truthConn->close();
 
         if ($result->num_rows == 0) {
-            return FALSE;
+            echo "Data from $date not found. ";
+            $message .= "Data from $date has been found missing. ";
+            
+            $previousDate = date('Y-m-d', strtotime($date . ' -1 day'));
+            
+            $validity = checkPreviousData($message, $previousDate);
+            if ($validity) {
+                updatePreviousData($message, $previousDate);
+                return TRUE;
+            }
+
         } else {
-            $message .= "Data last updated on $previousDate. ";
+            echo "Data last updated on $date. ";
+            $message .= "Data last updated on $date. ";
             return TRUE;
         }
+        return FALSE;
     }
 
 
@@ -310,6 +324,83 @@ class FileUploadController extends Controller
         }
 
         $incrementalConn->close();
+    }
+
+    // These functions deal with fault management.
+    private function updatePreviousData($message, $date)
+    {
+        clearIncremental();
+        copyDataToIncremental($date);
+        sendPreviousIncrementalToMaster($date);
+        populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount);
+        clearIncremental();
+        echo "Data from $date updated to master. ";
+        $message .= "Data from $date updated to master. ";
+    }
+
+    private function sendPreviousIncrementalToMaster($date)
+    {
+        $incrementalServername = "127.0.0.1"; // feeder_data_new_incremental credentials
+        $incrementalUsername = "root";
+        $incrementalPassword = "Untrusted";
+        $incrementalDatabase = "feeder_data_new_incremental";
+
+        $incrementalConn = new \MySQLi($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
+        if ($incrementalConn->connect_error) { // Verify connection
+            die("Connection to feeder_data_new_incremental failed: " . $incrementalConn->connect_error);
+        }
+
+        $masterServername = "127.0.0.1"; // master credentials
+        $masterUsername = "root";
+        $masterPassword = "Untrusted";
+        $masterDatabase = "master";
+
+        $masterConn = new \MySQLi($masterServername, $masterUsername, $masterPassword, $masterDatabase);
+        if ($masterConn->connect_error) {
+            die("Connection to master failed: " . $masterConn->connect_error);
+        }
+
+        $sql = "INSERT INTO master SELECT * FROM feeder_data_new_incremental WHERE id LIKE '%$date%'";
+        $result = $incrementalConn->query($sql);
+        
+        $incrementalConn->close();
+        $masterConn->close();
+
+    }
+
+    private function copyDataToIncremental($date) 
+    {
+        $data_newServername = "127.0.0.1"; // feeder_data_new credentials
+        $data_newUsername = "root";
+        $data_newPassword = "Untrusted";
+        $data_newDatabase = "feeder_data_new";
+
+        $data_newConn = new \MySQLi($data_newServername, $data_newUsername, $data_newPassword, $data_newDatabase);
+        if ($data_newConn->connect_error) { // Verify connection
+            die("Connection to feeder_data_new failed: " . $data_newConn->connect_error);
+        }
+
+        $incrementalServername = "127.0.0.1"; // feeder_data_new_incremental credentials
+        $incrementalUsername = "root";
+        $incrementalPassword = "Untrusted";
+        $incrementalDatabase = "feeder_data_new_incremental";
+
+        $incrementalConn = new \MySQLi($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
+        if ($incrementalConn->connect_error) { // Verify connection
+            die("Connection to feeder_data_new_incremental failed: " . $incrementalConn->connect_error);
+        }
+
+        $sql = "INSERT INTO feeder_data_new_incremental SELECT * FROM feeder_data_new WHERE id LIKE '%$date%'";
+        $result = $incrementalConn->query($sql);
+        
+        $data_newConn->close();
+        $incrementalConn->close();
+
+        if ($result) {
+            echo "Incremental table updated successfully.";
+        } else {
+            die("Error copying data from feeder_data_new to feeder_data_new_incremental: " . $incrementalConn->error);
+        }
     }
 
 }
