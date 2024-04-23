@@ -140,6 +140,7 @@ class FileUploadController extends Controller
           $this->sendIncrementalToMaster($sqlDump, $message);
           $this->populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount, $sqlDump);
           $this->clearIncremental();
+          $this->updateDataSentLog($yesterdayDate); // The tables should be updated now, so update the log to reflect that.
         } else {
             Log::info('There is no new data to send from day ' . $yesterdayDate);
             $message .= "There is no new data to send from day " . $yesterdayDate . ". ";
@@ -149,6 +150,27 @@ class FileUploadController extends Controller
         return response()->json(['message' => $message, 'records' => $recordCount]);
     }
 
+    private function updateDataSentLog($yesterdayDate)
+    {
+        $today = date("Y-m-d");
+
+        $truthServername = "127.0.0.1"; // data_sent_log credentials
+        $truthUsername = "root";
+        $truthPassword = "Untrusted";
+        $truthDatabase = "data_sent_log";
+
+        $truthConn = new \MySQLi($truthServername, $truthUsername, $truthPassword, $truthDatabase);
+        if ($truthConn->connect_error) {
+            die("Connection to table data_sent_log failed: " . $truthConn->connect_error);
+        }
+
+        $sql = "INSERT INTO data_sent_log (data_date, sent_date, data_sent) VALUES ('$yesterdayDate', '$today', 1)";
+        $result = $truthConn->query($sql);
+
+        $truthConn->close();
+
+        die("Update to data_sent_log failed.");
+    }
 
     private function checkPreviousData($previousDate)
     {
@@ -163,7 +185,7 @@ class FileUploadController extends Controller
             die("Connection to table data_sent_log failed: " . $truthConn->connect_error);
         }
 
-        $sql = "SELECT * FROM data_sent_log WHERE data_date = $date AND data_sent = 1";
+        $sql = "SELECT * FROM data_sent_log WHERE data_date = $previousDate AND data_sent = 1";
         $result = $truthConn->query($sql);
 
         $truthConn->close();
@@ -171,7 +193,7 @@ class FileUploadController extends Controller
         if ($result->num_rows == 0) {
             return FALSE;
         } else {
-            $message .= "Data last updated on $date. ";
+            $message .= "Data last updated on $previousDate. ";
             return TRUE;
         }
     }
