@@ -234,21 +234,25 @@ class FileUploadController extends Controller
             die("Connection to master failed: " . $masterConn->connect_error);
         }
 
+        // Assuming $sqlDump is your SQL dump string
+        $sqlDump = str_replace('`feeder_data_new_incremental`', '`feeder_data_new`', $sqlDump);
+
         $sql_queries = explode(';', $sqlDump);
         foreach ($sql_queries as $sql) {
-            echo ($sql);
-            if (trim($sql) != '') { // If there is nothing to add, do not.
-
-                if ($masterConn->query($sql) != TRUE) {
+            $sql = trim($sql);  // Trim to remove any extraneous whitespace
+            if ($sql != '') {
+                echo ($sql . "<br>");  // Display the SQL command to be executed
+                if ($masterConn->query($sql) !== TRUE) {
                     die("Error executing query while adding incremental data to master: " . $masterConn->error);
                 }
-
             }
         }
         $masterConn->close();
-        $message .= "Successfully sent incremental data to master. ";
 
-        return response()->json(['sent incremental to master']);
+        $message = "Successfully sent incremental data to master.";
+
+        return response()->json(['message' => $message]);
+
     }
 
 
@@ -334,14 +338,14 @@ class FileUploadController extends Controller
 
                 $columns = explode(',', $matches[1]);
 
-                
+
                 $values = explode(',', $matches[2]);
 
                 $idIndex = array_search('`id`', $columns);
 
                 if ($idIndex != false && isset($values[$idIndex])) {
                     $idValue = trim($values[$idIndex], '`\'"');
-   
+
                     if ($idLast == null) {
                         $idLast = $idValue;
                     }
