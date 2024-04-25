@@ -246,23 +246,9 @@ class FileUploadController extends Controller
     private function populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount, $sqlDump)
     {
 
-        $sqlStatements = explode(';', $sqlDump); // Find id_first and id_last
-        $ids = array();
-        echo ($sqlDump);
-        foreach ($sqlStatements as $sql) {
-            if (trim($sql) != '') {
-                $parts = explode(',', $sql);
-                $id = trim($parts[0]);
-                echo ($id);
-                echo ($sqlStatements);
-
-                $ids[] = $id;
-            }
-        }
-
-        $id_first = reset($ids);
-
-        $id_last = end($ids);
+        $idsResult = getIdsForTable($sqlDump);
+        $idFirst = $result['idFirst'];
+        $idLast = $result['idLast'];
 
         $updated = date('Y-m-d H:i:s');
 
@@ -324,6 +310,36 @@ class FileUploadController extends Controller
         $idsConn->close();
     }
 
+    function getIdsForTable($sqlDump) {
+        $sqlStatements = explode(';', $sqlDump);
+        
+        $idFirst = null;
+        $idLast = null;
+    
+        foreach ($sqlStatements as $sql) {
+            $sql = trim($sql);
+            
+            if (!empty($sql)) {
+                preg_match('/INSERT INTO .* \((.*?)\) VALUES .*?\((.*?)\)/', $sql, $matches);
+                $columns = explode(',', $matches[1]);
+                $values = explode(',', $matches[2]);
+    
+                $idIndex = array_search('`id`', $columns);
+                
+                if ($idIndex !== false && isset($values[$idIndex])) {
+                    $idValue = trim($values[$idIndex], '`\'"');
+                    
+                    if ($idLast === null) {
+                        $idLast = $idValue;
+                    }
+                    $idLast = $idValue;
+                }
+            }
+        }
+    
+        return array('idFirst' => $idFirst, 'idLast' => $idLast);
+    }
+    
 
     private function clearIncremental()
     {
