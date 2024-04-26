@@ -209,10 +209,7 @@ class FileUploadController extends Controller
 
     }
 
-
-    private function checkPreviousData($message, $date, $matches, $recordCount, $sqlDump)
-    {
-        // Check if the previous day's incremental table has been updated.
+    function getSQLCredentials(){
         $truthServername = "127.0.0.1"; // data_sent_log credentials
         $truthUsername = "root";
         $truthPassword = "Sun84Mus";
@@ -221,7 +218,15 @@ class FileUploadController extends Controller
         $truthConn = new \MySQLi($truthServername, $truthUsername, $truthPassword, $truthDatabase);
         if ($truthConn->connect_error) {
             die("Connection to data_sent_log failed: " . $truthConn->connect_error);
+        }else{
+            return $truthConn;
         }
+    }
+
+    private function checkPreviousData($message, $date, $matches, $recordCount, $sqlDump)
+    {
+
+        $truthConn = $this->getSQLCredentials();
 
         $sql = "SELECT * FROM data_sent_log WHERE data_date = '$date' AND data_sent = 1";
         $result = $truthConn->query($sql);
@@ -252,15 +257,8 @@ class FileUploadController extends Controller
     private function sendIncrementalToMaster($sqlDump, $message)
     {
 
-        $masterServername = "127.0.0.1"; // master credentials
-        $masterUsername = "root";
-        $masterPassword = "Sun84Mus";
-        $masterDatabase = "pig_team_server_sql";
 
-        $masterConn = new \MySQLi($masterServername, $masterUsername, $masterPassword, $masterDatabase);
-        if ($masterConn->connect_error) {
-            die("Connection to master failed: " . $masterConn->connect_error);
-        }
+        $masterConn = $this->getSQLCredentials();
 
 
 
@@ -319,12 +317,6 @@ class FileUploadController extends Controller
             var_dump($idsResult);  // This will show the structure and content of idsResult
         }
 
-        // Your remaining code...
-
-
-     //   $idsResult = $this->getIdsForTable($sqlDump);
-      //  $id_first = $idsResult['idFirst'];
-      //  $id_last = $idsResult['idLast'];
         echo ("----");
 
         echo ($id_first);
@@ -351,15 +343,9 @@ class FileUploadController extends Controller
 
         $cnt_rfids = count($unique_rfid_values);
 
-        $idsServername = "127.0.0.1"; // feeder_data_ids credentials
-        $idsUsername = "root";
-        $idsPassword = "Sun84Mus";
-        $idsDatabase = "pig_team_server_sql";
 
-        $idsConn = new \MySQLi($idsServername, $idsUsername, $idsPassword, $idsDatabase);
-        if ($idsConn->connect_error) { // Verify connection
-            die("Connection to feeder_data_ids failed: " . $idsConn->connect_error);
-        }
+        $idsConn = $this->getSQLCredentials();
+
         $sql = "SELECT * FROM feeder_data_ids WHERE date = '$yesterdayDate'";
 
         $result = $idsConn->query($sql);
@@ -396,15 +382,7 @@ class FileUploadController extends Controller
 
     function getIdsForTable() {
 
-        $Servername = "127.0.0.1"; // feeder_data_new_incremental credentials
-        $Username = "root";
-        $Password = "Sun84Mus";
-        $Database = "pig_team_server_sql";
-
-        $Conn = new \MySQLi($Servername, $Username, $Password, $Database);
-        if ($Conn->connect_error) { // Verify connection
-            die("Connection to database failed: " . $Conn->connect_error);
-        }
+        $Conn = $this->getSQLCredentials();
 
         $idFirst = null;
         $idLast = null;
@@ -438,15 +416,8 @@ class FileUploadController extends Controller
 
     private function clearIncremental()
     {
-        $incrementalServername = "127.0.0.1"; // feeder_data_new_incremental credentials
-        $incrementalUsername = "root";
-        $incrementalPassword = "Sun84Mus";
-        $incrementalDatabase = "pig_team_server_sql";
 
-        $incrementalConn = new \MySQLi($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
-        if ($incrementalConn->connect_error) { // Verify connection
-            die("Connection to feeder_data_new_incremental failed: " . $incrementalConn->connect_error);
-        }
+        $incrementalConn = $this->getSQLCredentials();
 
         $sql = "DELETE FROM feeder_data_new_incremental";
 
@@ -471,66 +442,29 @@ class FileUploadController extends Controller
 
     private function sendPreviousIncrementalToMaster($date)
     {
-        $incrementalServername = "127.0.0.1"; // feeder_data_new_incremental credentials
-        $incrementalUsername = "root";
-        $incrementalPassword = "Sun84Mus";
-        $incrementalDatabase = "pig_team_server_sql";
-
-        $incrementalConn = new \MySQLi($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
-        if ($incrementalConn->connect_error) { // Verify connection
-            die("Connection to feeder_data_new_incremental failed: " . $incrementalConn->connect_error);
-        }
-
-        $masterServername = "127.0.0.1"; // master credentials
-        $masterUsername = "root";
-        $masterPassword = "Sun84Mus";
-        $masterDatabase = "pig_team_server_sql";
-
-        $masterConn = new \MySQLi($masterServername, $masterUsername, $masterPassword, $masterDatabase);
-        if ($masterConn->connect_error) {
-            die("Connection to master failed: " . $masterConn->connect_error);
-        }
+        $conn = $this->getSQLCredentials();
 
         $sql = "INSERT INTO master SELECT * FROM feeder_data_new_incremental WHERE id LIKE '%$date%'";
-        $result = $incrementalConn->query($sql);
+        $result = $conn->query($sql);
 
-        $incrementalConn->close();
-        $masterConn->close();
+        $conn->close();
 
     }
 
     private function copyDataToIncremental($date)
     {
-        $data_newServername = "127.0.0.1"; // feeder_data_new credentials
-        $data_newUsername = "root";
-        $data_newPassword = "Sun84Mus";
-        $data_newDatabase = "pig_team_server_sql";
-
-        $data_newConn = new \MySQLi($data_newServername, $data_newUsername, $data_newPassword, $data_newDatabase);
-        if ($data_newConn->connect_error) { // Verify connection
-            die("Connection to feeder_data_new_lower failed: " . $data_newConn->connect_error);
-        }
-
-        $incrementalServername = "127.0.0.1"; // feeder_data_new_incremental credentials
-        $incrementalUsername = "root";
-        $incrementalPassword = "Sun84Mus";
-        $incrementalDatabase = "pig_team_server_sql";
-
-        $incrementalConn = new \MySQLi($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
-        if ($incrementalConn->connect_error) { // Verify connection
-            die("Connection to feeder_data_new_incremental failed: " . $incrementalConn->connect_error);
-        }
+        $conn = $this->getSQLCredentials();
 
         $sql = "INSERT INTO feeder_data_new_incremental SELECT * FROM feeder_data_new_lower WHERE id LIKE '%$date%'";
-        $result = $incrementalConn->query($sql);
+        $result = $conn->query($sql);
 
-        $data_newConn->close();
-        $incrementalConn->close();
+        $conn->close();
+
 
         if ($result) {
             echo "Incremental table updated successfully.";
         } else {
-            die("Error copying data from feeder_data_new to feeder_data_new_incremental: " . $incrementalConn->error);
+            die("Error copying data from feeder_data_new to feeder_data_new_incremental: " . $conn->error);
         }
     }
 
