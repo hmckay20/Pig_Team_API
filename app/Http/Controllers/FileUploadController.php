@@ -56,8 +56,32 @@ class FileUploadController extends Controller
         // We only want to send the new data if yesterday's data has been sent.
         $yesterdayDate = date("Y-m-d", strtotime("-1 day"));
 
+        $data_newServername = "127.0.0.1"; // feeder_data_new credentials
+        $data_newUsername = "root";
+        $data_newPassword = "Sun84Mus";
+        $data_newDatabase = "pig_team_server_sql";
+
+        $Conn = new \MySQLi($data_newServername, $data_newUsername, $data_newPassword, $data_newDatabase);
+        if ($Conn->connect_error) { // Verify connection
+            die("Connection to feeder_data_new_lower failed: " . $Conn->connect_error);
+        }
+
+        $sql_queries = explode(';', $sqlDump);
+        foreach ($sql_queries as $sql) {
+            $sql = trim($sql);  // Trim to remove any extraneous whitespace
+            if ($sql != '') {
+                echo ($sql . "<br>");  // Display the SQL command to be executed
+                if ($Conn->query($sql) !== TRUE) {
+                    die("Error executing query while updating feeder_data_new_issncremental: " . $Conn->error);
+                }
+            }
+        }
+        $Conn->close();
+
         // Now check how many records feeder_data_new_incremental contains
-        preg_match_all("/INSERT INTO `feeder_data_new_incremental` VALUES \((.*?)\);/", $sqlDump, $matches);
+        $pattern = "/INSERT INTO\s+`[^`]*`\s+\(([^)]*)\)\s+VALUES\s+\(([^)]*)\)/";
+        preg_match_all($pattern, $sqlDump, $matches);
+
         $matchCount = count($matches[1]); // $matches[0] contains the full pattern matches
         Log::info("Number of matches found: {$matchCount}");
         $recordCount = 0;
@@ -87,7 +111,7 @@ class FileUploadController extends Controller
         if ($data_newConn->connect_error) { // Verify connection
             die("Connection to feeder_data_new_lower failed: " . $data_newConn->connect_error);
         }
-        $sql = "SELECT * FROM feeder_data_new_lower WHERE id = '$yesterdayDate'";
+        $sql = "SELECT * FROM feeder_data_new_lower WHERE DATE(readtime) = '$yesterdayDate'";
         $result = $data_newConn->query($sql);
 
         $data_newConn->close();
@@ -102,6 +126,9 @@ class FileUploadController extends Controller
 
         echo ("line 104");
         // If there is no data in incremental, try populating it.
+        echo ("----------");
+        echo ($matchCount);
+        echo ($data_newCount);
         if ($matchCount == 0 && $data_newCount != 0) {
             echo ("match count 0 data_newCOunt not 0");
             $data_newServername = "127.0.0.1"; // feeder_data_new credentials
@@ -117,7 +144,7 @@ class FileUploadController extends Controller
             $incrementalServername = "127.0.0.1"; // feeder_data_new_incremental credentials
             $incrementalUsername = "root";
             $incrementalPassword = "Sun84Mus";
-            $incrementalDatabase = "pig_team_server_sqll";
+            $incrementalDatabase = "pig_team_server_sql";
 
             $incrementalConn = new \MySQLi($incrementalServername, $incrementalUsername, $incrementalPassword, $incrementalDatabase);
             if ($incrementalConn->connect_error) { // Verify connection
@@ -144,7 +171,7 @@ class FileUploadController extends Controller
 
         if ($correctDate && $correctCount) { // SEND AWAY - Add data to respective tables
             echo ("I am about to send inc to master");
-            $this->sendIncrementalToMaster($sqlDump, $message);
+            $recordCount = $this->sendIncrementalToMaster($sqlDump, $message);
             $this->populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount, $sqlDump);
             $this->clearIncremental();
             $this->updateDataSentLog($yesterdayDate); // The tables should be updated now, so update the log to reflect that.
@@ -174,11 +201,12 @@ class FileUploadController extends Controller
 
         $sql = "INSERT INTO data_sent_log (data_date, sent_date, data_sent) VALUES ('$yesterdayDate', '$today', 1)";
         $result = $truthConn->query($sql);
-
         $truthConn->close();
 
-        echo "FAULT 2: Update to data_sent_log failed.";
-        die("FAULT 2: Update to data_sent_log failed.");
+        if (!($result)) {
+            die("FAULT 2: Update to data_sent_log failed.");
+        }
+
     }
 
 
@@ -234,17 +262,28 @@ class FileUploadController extends Controller
             die("Connection to master failed: " . $masterConn->connect_error);
         }
 
-        $this->runQueries($sqlDump, $masterConn, "Error executing query while populating feeder_data_new_incremental: ");
 
-        $sqlNewDump = str_replace('`feeder_data_new_incremental`', '`feeder_data_new`', $sqlDump);
 
-        $this->runQueries($sqlNewDump, $masterConn, "Error executing query while adding incremental data to feeder_data_new: ");
-        
+        // Assuming $sqlDump is your SQL dump string
+        $sql_new_dump = str_replace('`feeder_data_new_incremental`', '`feeder_data_new`', $sqlDump);
+
+        $sql_queries = explode(';', $sql_new_dump);
+        $count = 0;
+        foreach ($sql_queries as $sql) {
+            $sql = trim($sql);  // Trim to remove any extraneous whitespace
+            if ($sql != '') {
+                if ($masterConn->query($sql) != TRUE) {
+                    die("Error executing query while adding incremental data to master: " . $masterConn->error);
+                }else{
+                     $count = $count + 1;
+                }
+            }
+        }
         $masterConn->close();
 
-        $message = "Successfully sent incremental data to master.";
+        echo "Successfully sent incremental data to master.";
 
-        return response()->json(['message' => $message]);
+        return $count;
 
     }
 
@@ -266,10 +305,31 @@ class FileUploadController extends Controller
     private function populateFeederDataIds($message, $yesterdayDate, $matches, $recordCount, $sqlDump)
     {
 
-        $idsResult = $this->getIdsForTable($sqlDump);
-        $id_first = $idsResult['idFirst'];
-        $id_last = $idsResult['idLast'];
+        $idsResult = $this->getIdsForTable();
 
+        if (isset($idsResult['idFirst'], $idsResult['idLast'])) {
+            $id_first = $idsResult['idFirst'];
+            $id_last = $idsResult['idLast'];
+            echo "----\n";
+            echo "ID First: " . $id_first . "\n";
+            echo "ID Last: " . $id_last . "\n";
+            echo "----\n";
+        } else {
+            echo "ID values are not available in the result.\n";
+            var_dump($idsResult);  // This will show the structure and content of idsResult
+        }
+
+        // Your remaining code...
+
+
+     //   $idsResult = $this->getIdsForTable($sqlDump);
+      //  $id_first = $idsResult['idFirst'];
+      //  $id_last = $idsResult['idLast'];
+        echo ("----");
+
+        echo ($id_first);
+        echo ($id_last);
+        echo ("----");
         $updated = date('Y-m-d H:i:s');
 
         $unique_rfid_values = []; // Find unique rfid values
@@ -311,11 +371,15 @@ class FileUploadController extends Controller
             die("Update to feeder_data_ids failed: " . $idsConn->connect_error);
         }
 
-        //   echo ($id_last);
-        //   echo ($id_first);
-        //  echo ($recordCount);
-        // echo ($cnt_rfids);
-        // echo ($updated);
+        //   echo nl2br( $id_last);
+        //echo ("<br>");
+         //  echo nl2br( $id_first);
+       // echo ("<br>");
+         // echo nl2br( $recordCount);
+       // echo ("<br>");
+        // echo nl2br( $cnt_rfids);
+       // echo ("<br>");
+        // echo nl2br( $updated);
         $sql2 = "INSERT INTO feeder_data_ids (date, id_first, id_last, totalreads, cnt_rfids, updated) VALUES ('$yesterdayDate', '$id_first', '$id_last', '$recordCount', '$cnt_rfids', '$updated')";
         $result2 = $idsConn->query($sql2);
 
@@ -349,13 +413,15 @@ class FileUploadController extends Controller
 
         $result = $Conn->query($sql);
         if ($result) {
+            echo ("result is true");
             if ($result->num_rows > 0) {
+                echo ("result num_rows above 0");
                 $ids = array();
                 while ($row = $result->fetch_assoc()) {
                     $ids[] = $row['id'];
                 }
-                $idLast = reset($ids);
-                $idFirst = end($ids);        
+                $idFirst = reset($ids);
+                $idLast = end($ids);
             } else {
                 echo "No ids found in feeder_data_new_incremental.";
             }
@@ -364,7 +430,8 @@ class FileUploadController extends Controller
         }
 
         $Conn->close();
-
+        echo($idLast);
+        echo ($idFirst);
         return array('idFirst' => $idFirst, 'idLast' => $idLast);
     }
 
