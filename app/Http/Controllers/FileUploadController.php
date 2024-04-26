@@ -330,37 +330,40 @@ class FileUploadController extends Controller
         $idsConn->close();
     }
 
-    function getIdsForTable($sqlDump) {
-        $sqlStatements = explode(';', $sqlDump);
+    function getIdsForTable() {
+
+        $Servername = "127.0.0.1"; // feeder_data_new_incremental credentials
+        $Username = "root";
+        $Password = "Sun84Mus";
+        $Database = "pig_team_server_sql";
+
+        $Conn = new \MySQLi($Servername, $Username, $Password, $Database);
+        if ($Conn->connect_error) { // Verify connection
+            die("Connection to database failed: " . $Conn->connect_error);
+        }
 
         $idFirst = null;
         $idLast = null;
 
-        foreach ($sqlStatements as $sql) {
-            $sql = trim($sql);
+        $sql = "SELECT id FROM feeder_data_new_incremental";
 
-            if (!empty($sql)) {
-                preg_match('/INSERT INTO\s+`.*?`\s+\((.*?)\)\s+VALUES\s+\((.*?)\)/', $sql, $matches);
-
-
-                $columns = explode(',', $matches[1]);
-
-
-                $values = explode(',', $matches[2]);
-
-                $idIndex = array_search('`id`', $columns);
-
-                if ($idIndex != false && isset($values[$idIndex])) {
-                    $idValue = trim($values[$idIndex], '`\'"');
-
-                    if ($idLast == null) {
-                        $idLast = $idValue;
-                    }
-                    $idLast = $idValue;
+        $result = $Conn->query($sql);
+        if ($result) {
+            if ($result->num_rows > 0) {
+                $ids = array();
+                while ($row = $result->fetch_assoc()) {
+                    $ids[] = $row['id'];
                 }
+                $idLast = reset($ids);
+                $idFirst = end($ids);        
+            } else {
+                echo "No ids found in feeder_data_new_incremental.";
             }
+        } else {
+            die("Error executing query in feeder_data_new_incremental: " . $Conn->connect_error);
         }
 
+        $Conn->close();
 
         return array('idFirst' => $idFirst, 'idLast' => $idLast);
     }
