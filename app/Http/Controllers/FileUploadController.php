@@ -234,25 +234,32 @@ class FileUploadController extends Controller
             die("Connection to master failed: " . $masterConn->connect_error);
         }
 
-        // Assuming $sqlDump is your SQL dump string
-        $sqlDump = str_replace('`feeder_data_new_incremental`', '`feeder_data_new`', $sqlDump);
+        $this->runQueries($sqlDump, $masterConn, "Error executing query while populating feeder_data_new_incremental: ");
 
-        $sql_queries = explode(';', $sqlDump);
-        foreach ($sql_queries as $sql) {
-            $sql = trim($sql);  // Trim to remove any extraneous whitespace
-            if ($sql != '') {
-                echo ($sql . "<br>");  // Display the SQL command to be executed
-                if ($masterConn->query($sql) !== TRUE) {
-                    die("Error executing query while adding incremental data to master: " . $masterConn->error);
-                }
-            }
-        }
+        $sqlNewDump = str_replace('`feeder_data_new_incremental`', '`feeder_data_new`', $sqlDump);
+
+        $this->runQueries($sqlNewDump, $masterConn, "Error executing query while adding incremental data to feeder_data_new: ");
+        
         $masterConn->close();
 
         $message = "Successfully sent incremental data to master.";
 
         return response()->json(['message' => $message]);
 
+    }
+
+    private function runQueries($sqlDump, $Conn, $errorString)
+    {
+        $sql_queries = explode(';', $sqlDump);
+        foreach ($sql_queries as $sql) {
+            $sql = trim($sql);  // Trim to remove any extraneous whitespace
+            if ($sql != '') {
+                echo ($sql . "<br>");  // Display the SQL command to be executed
+                if ($Conn->query($sql) !== TRUE) {
+                    die($errorString . $Conn->error);
+                }
+            }
+        }
     }
 
 
