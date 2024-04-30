@@ -23,6 +23,7 @@ Route::post('/hourly-status', [HourlyStatusController::class, 'SendHourlyStatus'
 Route::post('/image-capture-status', [ImageCaptureStatusController::class, 'CaptureStatus']);
 Route::post('/send-log-files', [LogFilesController::class, 'SendLogFiles']);
 Route::post('/upload-incremental', [FileUploadController::class, 'incrementalUpload']);
+Route::post('/send-loca-sent-log', [SendLocalSentLog::class, 'sendLocalSentLog']);
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
