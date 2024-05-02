@@ -87,6 +87,7 @@ class FileUploadController extends Controller
         } else {
             Log::info('There is no new data to send from day ' . $requestedUploadDate);
             $message .= "There is no new data to send from day " . $requestedUploadDate . ". ";
+            $this->updateDataSentLog($requestedUploadDate);
         }
 
         Log::info('right before I send response');
