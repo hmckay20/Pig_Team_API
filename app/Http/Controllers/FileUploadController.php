@@ -118,17 +118,12 @@ class FileUploadController extends Controller
 
         if ($result) {
             $data_newCount = $result->num_rows;
-            echo ($data_newCount);
         } else {
             die("Error executing query in feeder_data_new_lower: " . $data_newConn->connect_error);
         }
 
 
-        echo ("line 104");
-        // If there is no data in incremental, try populating it.
-        echo ("----------");
-        echo ($matchCount);
-        echo ($data_newCount);
+
         if ($matchCount == 0 && $data_newCount != 0) {
             echo ("match count 0 data_newCOunt not 0");
             $data_newServername = "127.0.0.1"; // feeder_data_new credentials
@@ -408,6 +403,7 @@ class FileUploadController extends Controller
         }
 
         $Conn->close();
+
         echo($idLast);
         echo ($idFirst);
         return array('idFirst' => $idFirst, 'idLast' => $idLast);
@@ -444,20 +440,27 @@ class FileUploadController extends Controller
     {
         $conn = $this->getSQLCredentials();
 
-        $sql = "INSERT INTO master SELECT * FROM feeder_data_new_incremental WHERE id LIKE '%$date%'";
+        $sql = "INSERT INTO feeder_data_new SELECT * FROM feeder_data_new_incremental WHERE DATE(readtime) = '%$date%'";
         $result = $conn->query($sql);
 
         $conn->close();
+
+        if ($result) {
+            echo "Server updated successfully.";
+        } else {
+            die("Error copying feeder_data_new_incremental to server " . $conn->error);
+        }
 
     }
 
     private function copyDataToIncremental($date)
     {
         $conn = $this->getSQLCredentials();
-
-        $sql = "INSERT INTO feeder_data_new_incremental SELECT * FROM feeder_data_new_lower WHERE id LIKE '%$date%'";
+        echo ("This is date in copy Data to Incremental ______");
+        echo ($date);
+        $sql = "INSERT INTO feeder_data_new_incremental SELECT * FROM feeder_data_new_lower WHERE DATE(readtime) = '%$date%'";
         $result = $conn->query($sql);
-
+       // echo ($result->num_rows);
         $conn->close();
 
 
