@@ -48,7 +48,7 @@ def rerun_if_different_date():
     difference = yesterday - last_date_dt
     if (difference.days > 1):
         print("-------------------------------------------------------------------------------------")
-        print("The master table table is behind my ", difference.days, "days")
+        print("The master table table is behind by", difference.days, "days")
         print("Performing update now")
         print("-------------------------------------------------------------------------------------")
     while(last_date_dt < yesterday):
@@ -61,6 +61,7 @@ def rerun_if_different_date():
         if success:
             print("Successfully updated master from ", next_day_str)
             update_data_send_log(next_day_str)
+            update_data_send_log_server(next_day_str)
             print("Updated data_sent_log table")
             last_date_log = check_data_send_log_last_date()
             last_date_dt = pd.to_datetime(last_date_log['data_date'].iloc[0]).date()
@@ -69,6 +70,28 @@ def rerun_if_different_date():
     print("Yesterday's date was:", yesterday, "The last Log Sent was: ", last_date_dt)
     print("-------------------------------------------------------------------------------------")
 
+def update_data_send_log_server(next_day_str):
+
+    url = 'http://127.0.0.1:8000/api/send-local-sent-log'
+    sent_date_str = datetime.now().strftime('%Y-%m-%d')
+    data = {
+        'data_date': next_day_str,
+        'sent_date': sent_date_str,
+        'data_sent': True
+    }
+
+    headers = {'Content-Type': 'application/json'}
+
+    try:
+        response = requests.post(url, json=data, headers=headers)
+
+        if response.status_code == 201:
+            print("Update server side Log Table succesfull")
+        else:
+            print("Failed to create log entry. Status code:")
+
+    except Exception as e:
+        print("An error occurred while sending the POST request:")
 
 
 def update_data_send_log(next_day_str):
@@ -168,18 +191,18 @@ def zip_sql_file(sql_file_path, last_date_log):
     return (final_zip_path, f"{zip_base_name}.zip")
 
 
-# def send_ics():
+def send_ics():
 
-#     with open(file_path_hello, 'rb') as file:
-#         files = {'file': file}
-#         response = requests.post(api_url_ics, files=files)
-#         print(response.text)
+    with open(file_path_hello, 'rb') as file:
+        files = {'file': file}
+        response = requests.post(api_url_ics, files=files)
+        print(response.text)
 
 
-# def send_log_files():
-#     files = {'file': open(file_path_log, 'rb')}
-#     response = requests.post(api_url_log, files=files)
-#     print(response.text)
+def send_log_files():
+    files = {'file': open(file_path_log, 'rb')}
+    response = requests.post(api_url_log, files=files)
+    print(response.text)
 
 def  upload_incremental(sql_file_path, zip_file_name, date_str):
     retries = 5
@@ -215,17 +238,11 @@ def  upload_incremental(sql_file_path, zip_file_name, date_str):
 def send_data():
     global total_reads_today
     total_reads_today += 1
-
     memory = psutil.virtual_memory()
-
     memory_usage = memory.percent
-
     memory_usage =psutil.virtual_memory().percent
-
     storage_used = psutil.disk_usage('/').percent
-   
     diskstation_use = 30
-
     data = {
         "time_of_status": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_reads_today": total_reads_today,
@@ -239,11 +256,22 @@ def send_data():
     print(response.text)
     print("Status code:", response.status_code)
 
-
+def send_local_log_to_server():
+    print
 
 
 def main():
     rerun_if_different_date()
+    # schedule.every().day.at("02:14").do(rerun_if_different_date)
+    # schedule.every(1).minutes.do(send_data)
+    # schedule.every(1).minutes.do(send_log_files)
+    
+    
+    # schedule.every(1).minutes.do(send_ics)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(60)  # Sleep for a minute
 
 if __name__ == '__main__':
     main()
