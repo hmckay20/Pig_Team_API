@@ -1,9 +1,6 @@
-
 <?php
 
 namespace App\Http\Controllers;
-
-
 
 use Illuminate\Http\Request;
 use App\Models\DataSentLog; // Assuming you have a model for your table
@@ -25,12 +22,11 @@ class SendLocalSentLogController extends Controller
             ];
         });
 
-        // Send data to the server
         $response = Http::post('http://server-api-url/api/data_sent_log', [
             'logs' => $dataToSend
         ]);
 
-        // Handle the response
+
         if ($response->successful()) {
             // Optionally mark logs as sent if the server acknowledges
             foreach ($logs as $log) {
