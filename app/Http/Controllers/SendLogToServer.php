@@ -7,7 +7,7 @@ use App\Models\DataSentLog; // Assuming this is your Eloquent model
 
 class SendLogToServer extends Controller
 {
-    protected $fillable = ['data_date', 'sent_date', 'data_sent'];
+
     public function store(Request $request)
     {
         $data = $request->validate([
