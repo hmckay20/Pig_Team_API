@@ -1,7 +1,9 @@
+
 import shutil
 import requests
 import pandas as pd
-from sqlalchemy import URL, create_engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import URL, create_engine, text
 from datetime import datetime, timedelta
 import zipfile
 import os
@@ -38,26 +40,75 @@ def rerun_if_different_date():
     last_date_dt = pd.to_datetime(last_date_log['data_date'].iloc[0]).date()
 
     print("start of program")
-    print(last_date_dt)
-    print(yesterday)
+    if (last_date_dt == yesterday):
+        print("-------------------------------------------------------------------------------------")
+        print("We are aleady up to date")
+        print("Yesterday's date was:", yesterday, "The last Log Sent was: ", last_date_dt)
+        print("-------------------------------------------------------------------------------------")
+    difference = yesterday - last_date_dt
+    if (difference.days > 1):
+        print("-------------------------------------------------------------------------------------")
+        print("The master table table is behind my ", difference.days, "days")
+        print("Performing update now")
+        print("-------------------------------------------------------------------------------------")
     while(last_date_dt < yesterday):
-        df = fetch_data_from_db(last_date_log)
+        df, next_day_str = fetch_data_from_db(last_date_log)
         sql_file_path = save_data_to_sql(df)
         zip_file_path, zip_file_name  = zip_sql_file(sql_file_path, last_date_log)
-        print("this is the path", zip_file_path)
-        print("this is zip file name",zip_file_name)
-        upload_incremental(zip_file_path, "zip_file")
-        last_date_log = check_data_send_log_last_date()
-        last_date_dt = pd.to_datetime(last_date_log['data_date'].iloc[0]).date()
+        print("-------------------------------------------------------------------------------------")
+        print("Updating master table from ", next_day_str)
+        success = upload_incremental(zip_file_path, "zip_file", next_day_str)
+        if success:
+            print("Successfully updated master from ", next_day_str)
+            update_data_send_log(next_day_str)
+            print("Updated data_sent_log table")
+            last_date_log = check_data_send_log_last_date()
+            last_date_dt = pd.to_datetime(last_date_log['data_date'].iloc[0]).date()
+    print("-------------------------------------------------------------------------------------")
+    print("We are aleady up to date")
+    print("Yesterday's date was:", yesterday, "The last Log Sent was: ", last_date_dt)
+    print("-------------------------------------------------------------------------------------")
 
 
 
+def update_data_send_log(next_day_str):
+    engine = create_engine(url_object)
+    today_date = datetime.now().date()
+
+    # Correctly formatted query using an f-string, wrapped with text() for security and compatibility
+    query = text(f"INSERT INTO data_sent_log (data_date, sent_date, data_sent) VALUES ('{next_day_str}', '{today_date}', 1)")
+
+    # Using a transaction
+    try:
+        with engine.connect() as connection:
+            # Begin a transaction
+            trans = connection.begin()
+            connection.execute(query)
+            trans.commit()  # Commit if all is well
+    except SQLAlchemyError as e:
+        # Rollback the transaction on error
+        if 'trans' in locals():
+            trans.rollback()
+        print("Failed to update data_sent_log for", {next_day_str})
 
 def check_data_send_log_last_date():
     engine = create_engine(url_object)
 
     query = f"SELECT data_date FROM data_sent_log WHERE data_sent = 1 ORDER BY data_date DESC LIMIT 1"
     last_date_log = pd.read_sql(query, engine)
+
+    if last_date_log.empty:
+        while True:
+            user_input = input("The table data_sent_log is empty. Please input a date to start from (YYYY-MM-DD): ")
+            try:
+                # Attempt to convert the input to a date, expecting a specific format
+                user_date = pd.to_datetime(user_input, format='%Y-%m-%d')
+                break  # Exit loop if successful
+            except ValueError:
+                print("Invalid date format. Please use YYYY-MM-DD format.")
+
+        # Create a DataFrame similar to what would have been retrieved by the query
+        last_date_log = pd.DataFrame({'data_date': [user_date]})
 
     return last_date_log
 
@@ -66,13 +117,15 @@ def fetch_data_from_db(last_date_log):
 
     next_day = last_date_dt + timedelta(days=1)
     next_day_str = next_day.strftime('%Y-%m-%d')
-    print("this is next day string", next_day_str)
+
 
     query = f"SELECT * FROM feeder_data_new_lower WHERE DATE(readtime) = '{next_day_str}'"
 
     engine = create_engine(url_object)
     df = pd.read_sql(query, engine)
-    return df
+    if(df.empty):
+        print("The table feeder_data_new is empty on ", next_day_str)
+    return df, next_day_str
 
 def save_data_to_sql(df):
     sql_file_path = 'C:/Users/hmmmc/oneDrive/Desktop/Pig_Team.SQL'
@@ -87,6 +140,8 @@ def save_data_to_sql(df):
 
 def zip_sql_file(sql_file_path, last_date_log):
     # Convert the date from last_date_log DataFrame to a string format for the zip file name
+    
+  
     try:
         zip_base_name = pd.to_datetime(last_date_log['data_date']).iloc[0].strftime('%Y-%m-%d')
     except Exception as e:
@@ -101,12 +156,10 @@ def zip_sql_file(sql_file_path, last_date_log):
     # Full path for the zip file, including the '.zip' extension
     zip_file_name = os.path.join(directory, zip_base_name)
 
-    print(f"Creating zip archive at '{zip_file_name}.zip' containing the file '{base_name}'")
     
     try:
         # Create a zip archive that includes the SQL file
         shutil.make_archive(zip_file_name, 'zip', directory, base_name)
-        print("Archive created successfully.")
     except Exception as e:
         print(f"An error occurred while creating the zip archive: {e}")
         return None
@@ -114,8 +167,6 @@ def zip_sql_file(sql_file_path, last_date_log):
 
     return (final_zip_path, f"{zip_base_name}.zip")
 
-# Example use of the function:
-# zip_sql_file("/path/to/data_from_yesterday.sql", last_date_log)
 
 # def send_ics():
 
@@ -130,17 +181,34 @@ def zip_sql_file(sql_file_path, last_date_log):
 #     response = requests.post(api_url_log, files=files)
 #     print(response.text)
 
-def upload_incremental(sql_file_path, zip_file_name):
-    try:
-        with open(sql_file_path, 'rb') as file:
-            files = {zip_file_name: file}  # Ensure the form field matches the API's expected field
-            response = requests.post(api_url_file, files=files)
-            print("Response text:", response.text)
-            print("Status code:", response.status_code)
-    except FileNotFoundError:
-        print("The file was not found at the specified path.")
-    except Exception as e:
-        print("An error occurred:", e)
+def  upload_incremental(sql_file_path, zip_file_name, date_str):
+    retries = 5
+    attempt = 0
+    delay = 30
+
+    while attempt < retries:
+        try:
+            with open(sql_file_path, 'rb') as file:
+                files = {zip_file_name: file}  # Ensure the form field matches the API's expected field
+                data = {'date': date_str}
+                response = requests.post(api_url_file, files=files, data=data)
+
+                if response.status_code == 200:
+                    return True
+                else:
+                    print("Upload Failed with status code ", response.status_code, "retrying....")
+                    
+                    
+        except FileNotFoundError:
+            print("The file was not found at the specified path.")
+            return False
+        except Exception as e:
+            print("An error occurred:", e)
+
+        
+        attempt += 1
+        time.sleep(delay)
+        return False
 
 
 
@@ -172,19 +240,6 @@ def send_data():
     print("Status code:", response.status_code)
 
 
-# schedule.every().hour.do(send_ics)
-# schedule.every().hour.do(send_log_files)
-# schedule.every(15).minutes.do(send_data)
-
-#schedule.every(2).minutes.do(send_ics)
-#schedule.every(2).minutes.do(send_log_files)
-#schedule.every(2).minutes.do(send_data)
-schedule.every(1).minute.do(upload_incremental)
-
-
-# while True:
-#     schedule.run_pending()
-#     time.sleep(1)
 
 
 def main():
@@ -193,25 +248,3 @@ def main():
 if __name__ == '__main__':
     main()
 
-
-
-
-
-
-
-# def consume_api():
-#     url = 'http://your-api-url.com/incrementalUpload'  # Replace this with the actual URL of your API
-#     files = {'file': open('path/to/your/zip/file.zip', 'rb')}  # Replace this with the path to your zip file
-#     response = requests.post(url, files=files)
-
-#     if response.status_code == 200:
-#         print("API call successful!")
-#         print("Response:", response.json())
-#     else:
-#         print("API call failed with status code:", response.status_code)
-#         print("Response:", response.text)
-#         handle_error(response.text)
-
-
-# def handle_error(error):
-#   return 0

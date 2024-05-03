@@ -64,51 +64,34 @@ class FileUploadController extends Controller
             }
         }
         $Conn->close();
-
+        log::info("I put stuff in incremental table");
         // Now check how many records feeder_data_new_incremental contains
-        $pattern = "/INSERT INTO\s+`[^`]*`\s+\(([^)]*)\)\s+VALUES\s+\(([^)]*)\)/";
+        $pattern = "/INSERT INTO ([A-Za-z]+(_[A-Za-z]+)+) \\([^)]*\\) VALUES \\([^)]*\\);/";
+
         preg_match_all($pattern, $sqlDump, $matches);
 
-        $matchCount = count($matches[1]); // $matches[0] contains the full pattern matches
-        Log::info("Number of matches found: {$matchCount}");
-        $recordCount = 0;
-        foreach ($matches[1] as $insertValues) {
-            $values = explode('),(', $insertValues);
-            $recordCount += count($values);
+        $matchCount = count($matches[0]); // Total number of matches
+        $recordCount = 0; // Count individual records
+
+        foreach ($matches[0] as $insertStatement) {
+            $recordCount++;
         }
+
 
         // Send that data
         if ($recordCount > 0) {
-            echo ("I am about to send inc to master");
             $recordCount = $this->sendIncrementalToMaster($sqlDump, $message);
             $this->populateFeederDataIds($message, $requestedUploadDate, $matches, $recordCount, $sqlDump);
             $this->clearIncremental();
-            $this->updateDataSentLog($requestedUploadDate); // The tables should be updated now, so update the log to reflect that.
         } else {
-            Log::info('There is no new data to send from day ' . $requestedUploadDate);
+          //  $this->populateFeederDataIds($message, $requestedUploadDate, $matches, $recordCount, $sqlDump);
             $message .= "There is no new data to send from day " . $requestedUploadDate . ". ";
-            $this->updateDataSentLog($requestedUploadDate);
+            $this->populateFeederDataIds($message, $requestedUploadDate, $matches, $recordCount, null);
         }
 
-        Log::info('right before I send response');
         return response()->json(['message' => $message, 'records' => $recordCount]);
     }
 
-
-    private function updateDataSentLog($requestedUploadDate)
-    {
-        $today = date("Y-m-d");
-
-        $Conn = $this->getSQLCredentials();
-
-        $sql = "INSERT INTO data_sent_log (data_date, sent_date, data_sent) VALUES ('$requestedUploadDate', '$today', 1)";
-        $result = $Conn->query($sql);
-        $Conn->close();
-
-        if (!($result)) {
-            die("Update to data_sent_log failed.");
-        }
-    }
 
     function getSQLCredentials(){
         $Servername = "127.0.0.1"; // data_sent_log credentials
@@ -128,22 +111,29 @@ class FileUploadController extends Controller
     private function sendIncrementalToMaster($sqlDump, $message)
     {
         $Conn = $this->getSQLCredentials();
-        // Assuming $sqlDump is your SQL dump string
-        $sql_new_dump = str_replace('`feeder_data_new_incremental`', '`feeder_data_new`', $sqlDump);
+        $sql_new_dump = preg_replace('/\s*`?feeder_data_new_incremental`?\s*/i', '`feeder_data_new`', $sqlDump);
 
-        $sql_queries = explode(';', $sql_new_dump);
+
         $count = 0;
+        $sql_queries = explode(';', $sql_new_dump);
         foreach ($sql_queries as $sql) {
             $sql = trim($sql);  // Trim to remove any extraneous whitespace
-            if ($sql != '') {
-                if ($Conn->query($sql) != TRUE) {
-                    die("Error executing query while adding incremental data to master: " . $Conn->error);
-                }else{
-                     $count = $count + 1;
+
+            if (!empty($sql)) {
+                echo ($sql . "<br>");  // Display the SQL command to be executed
+                if ($Conn->query($sql) !== TRUE) {
+                    Log::error("Error executing query: " . $sql . " - Error: " . $Conn->error);
+                    die("Error executing query while updating feeder_data_new: " . $Conn->error);
+                } else {
+                    $count++;
                 }
+            } else {
+                Log::info("Skipped execution of an empty SQL statement.");
             }
         }
+
         $Conn->close();
+
         echo "Successfully sent incremental data to master.";
         return $count;
     }
@@ -151,82 +141,81 @@ class FileUploadController extends Controller
 
     private function populateFeederDataIds($message, $requestedUploadDate, $matches, $recordCount, $sqlDump)
     {
-        $idsResult = $this->getIdsForTable();
 
-        if (isset($idsResult['idFirst'], $idsResult['idLast'])) {
-            $id_first = $idsResult['idFirst'];
-            $id_last = $idsResult['idLast'];
-            echo "----\n";
-            echo "ID First: " . $id_first . "\n";
-            echo "ID Last: " . $id_last . "\n";
-            echo "----\n";
-        } else {
-            echo "ID values are not available in the result.\n";
-            var_dump($idsResult);  // This will show the structure and content of idsResult
-        }
+        if ($sqlDump != null) {
+            $idsResult = $this->getIdsForTable();
 
-        echo ("----");
-
-        echo ($id_first);
-        echo ($id_last);
-        echo ("----");
-        $updated = date('Y-m-d H:i:s');
-
-        $unique_rfid_values = []; // Find unique rfid values
-
-        foreach ($matches[1] as $insert_values) {
-            preg_match_all('/"([^"]+)"/', $insert_values, $values);
-            // Check if there are at least 5 elements to avoid the undefined array key error
-            if (isset($values[1][4])) {
-                $rfid = $values[1][4];
-                if (!in_array($rfid, $unique_rfid_values)) {
-                    $unique_rfid_values[] = $rfid;
-                }
+            if (isset($idsResult['idFirst'], $idsResult['idLast'])) {
+                $id_first = $idsResult['idFirst'];
+                $id_last = $idsResult['idLast'];
+                echo "----\n";
+                echo "ID First: " . $id_first . "\n";
+                echo "ID Last: " . $id_last . "\n";
+                echo "----\n";
             } else {
-                // Handle the case where there are not enough values
-                // You might want to log this or take other appropriate action
-                Log::warning("An INSERT statement does not contain enough values to extract an RFID: $insert_values");
+                echo "ID values are not available in the result.\n";
+                var_dump($idsResult);  // This will show the structure and content of idsResult
             }
+
+            echo ("----");
+
+            echo ($id_first);
+            echo ($id_last);
+            echo ("----");
+            $updated = date('Y-m-d H:i:s');
+
+            $unique_rfid_values = []; // Find unique rfid values
+
+            foreach ($matches[1] as $insert_values) {
+                preg_match_all('/"([^"]+)"/', $insert_values, $values);
+                // Check if there are at least 5 elements to avoid the undefined array key error
+                if (isset($values[1][4])) {
+                    $rfid = $values[1][4];
+                    if (!in_array($rfid, $unique_rfid_values)) {
+                        $unique_rfid_values[] = $rfid;
+                    }
+                } else {
+                    // Handle the case where there are not enough values
+                    // You might want to log this or take other appropriate action
+                    echo ("An INSERT statement does not contain enough values to extract an RFID: $insert_values");
+                }
+            }
+
+            $cnt_rfids = count($unique_rfid_values);
+
+            $Conn = $this->getSQLCredentials();
+
+            $sql = "SELECT * FROM feeder_data_ids WHERE date = '$requestedUploadDate'";
+
+            $result = $Conn->query($sql);
+
+            if ($result) {
+                $message .= "Successfully updated feeder_data_ids. ";
+
+            } else {
+                die("Update to feeder_data_ids failed: " . $Conn->connect_error);
+            }
+
+            $sql2 = "INSERT INTO feeder_data_ids (date, id_first, id_last, totalreads, cnt_rfids, updated) VALUES ('$requestedUploadDate', '$id_first', '$id_last', '$recordCount', '$cnt_rfids', '$updated')";
+            $result2 = $Conn->query($sql2);
+
+            if ($result2) {
+                $message .= "Successfully updated feeder_data_ids. ";
+                echo ("we passed");
+            } else {
+                die("Update to feeder_data_ids failed: " . $Conn->connect_error);
+            }
+
+            $Conn->close();
+        }else{
+            $updated = date('Y-m-d H:i:s');
+            $Conn = $this->getSQLCredentials();
+            $sql = "INSERT INTO feeder_data_ids (date, id_first, id_last, totalreads, cnt_rfids, updated) VALUES ('$requestedUploadDate', 0, 0, 0, 0, '$updated')";
+            $result = $Conn->query($sql);
         }
-
-        $cnt_rfids = count($unique_rfid_values);
-
-        $Conn = $this->getSQLCredentials();
-
-        $sql = "SELECT * FROM feeder_data_ids WHERE date = '$requestedUploadDate'";
-
-        $result = $Conn->query($sql);
-
-        if ($result) {
-            $message .= "Successfully updated feeder_data_ids. ";
-
-        } else {
-            die("Update to feeder_data_ids failed: " . $Conn->connect_error);
-        }
-
-        //   echo nl2br( $id_last);
-        //echo ("<br>");
-         //  echo nl2br( $id_first);
-       // echo ("<br>");
-         // echo nl2br( $recordCount);
-       // echo ("<br>");
-        // echo nl2br( $cnt_rfids);
-       // echo ("<br>");
-        // echo nl2br( $updated);
-        $sql2 = "INSERT INTO feeder_data_ids (date, id_first, id_last, totalreads, cnt_rfids, updated) VALUES ('$requestedUploadDate', '$id_first', '$id_last', '$recordCount', '$cnt_rfids', '$updated')";
-        $result2 = $Conn->query($sql2);
-
-        if ($result2) {
-            $message .= "Successfully updated feeder_data_ids. ";
-            echo ("we passed");
-        } else {
-            die("Update to feeder_data_ids failed: " . $Conn->connect_error);
-        }
-
-        $Conn->close();
     }
 
-    function getIdsForTable() 
+    function getIdsForTable()
     {
         $Conn = $this->getSQLCredentials();
 
@@ -255,8 +244,6 @@ class FileUploadController extends Controller
 
         $Conn->close();
 
-        echo($idLast);
-        echo ($idFirst);
         return array('idFirst' => $idFirst, 'idLast' => $idLast);
     }
 
