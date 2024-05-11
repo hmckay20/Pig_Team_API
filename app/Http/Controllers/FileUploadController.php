@@ -94,10 +94,10 @@ class FileUploadController extends Controller
 
 
     function getSQLCredentials(){
-        $Servername = "127.0.0.1"; // data_sent_log credentials
-        $Username = "root";
-        $Password = "Sun84Mus";
-        $Database = "pig_team_server_sql";
+        $Servername = "000.0.0.0"; // data_sent_log credentials
+        $Username = "your_username";
+        $Password = "your_password";
+        $Database = "server_name";
 
         $Conn = new \MySQLi($Servername, $Username, $Password, $Database);
         if ($Conn->connect_error) {
