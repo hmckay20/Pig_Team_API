@@ -32,7 +32,10 @@ url_object = URL.create(
     database="pig_team_server_sql"
 )
 
-
+def reset_total_reads():
+    global total_reads_today
+    total_reads_today = 0
+    print("Total reads today has been reset to 0.")
 
 def rerun_if_different_date():
     yesterday = (datetime.now() - timedelta(days=1)).date()
@@ -204,35 +207,34 @@ def send_log_files():
     response = requests.post(api_url_log, files=files)
     print(response.text)
 
-def  upload_incremental(sql_file_path, zip_file_name, date_str):
+def upload_incremental(sql_file_path, zip_file_name, date_str):
     retries = 5
     attempt = 0
-    delay = 30
+    delay = 10  # Delay between retries in seconds
 
     while attempt < retries:
         try:
             with open(sql_file_path, 'rb') as file:
-                files = {zip_file_name: file}  # Ensure the form field matches the API's expected field
+                files = {zip_file_name: file}
                 data = {'date': date_str}
                 response = requests.post(api_url_file, files=files, data=data)
 
                 if response.status_code == 200:
+                    print("Upload successful.")
                     return True
                 else:
-                    print("Upload Failed with status code ", response.status_code, "retrying....")
-                    
-                    
+                    print(f"Upload failed with status code {response.status_code}. Retrying...")
         except FileNotFoundError:
             print("The file was not found at the specified path.")
             return False
         except Exception as e:
-            print("An error occurred:", e)
+            print(f"An error occurred: {e}. Retrying...")
 
-        
         attempt += 1
-        time.sleep(delay)
-        return False
+        time.sleep(delay)  # Wait before retrying
 
+    print("All retries failed.")
+    return False
 
 
 def send_data():
@@ -261,17 +263,15 @@ def send_local_log_to_server():
 
 
 def main():
-    rerun_if_different_date()
-    # schedule.every().day.at("02:14").do(rerun_if_different_date)
-    # schedule.every(1).minutes.do(send_data)
-    # schedule.every(1).minutes.do(send_log_files)
-    
-    
-    # schedule.every(1).minutes.do(send_ics)
+    schedule.every().day.at("23:59").do(reset_total_reads) 
+    schedule.every().day.at("12:54").do(rerun_if_different_date)
+    schedule.every(1).minutes.do(send_data)
+    schedule.every(1).minutes.do(send_log_files)
+    schedule.every(1).minutes.do(send_ics)
 
     while True:
         schedule.run_pending()
-        time.sleep(60)  # Sleep for a minute
+        time.sleep(60) 
 
 if __name__ == '__main__':
     main()
